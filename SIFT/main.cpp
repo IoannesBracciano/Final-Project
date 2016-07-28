@@ -27,6 +27,7 @@ p_opts::positional_options_description p_opts_pos;
 // Array used to map variable names with their corresponding values
 p_opts::variables_map p_opts_vm;
 
+
 /// <summary>Sets up the program options and parses the argv vector accordingly
 /// </summary>
 /// <param name="argc">the arguments count</param>
