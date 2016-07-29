@@ -239,9 +239,9 @@ double apply_meanshift(const fsys::path & input, const fsys::path & output,
 	return exec_time_s;
 }
 
-/*
- * --- Main entry point ---
- */
+///
+/// --- Main entry point ---
+///
 int main(int argc, const char** argv) {
 
 	// Try to set up program options
@@ -259,7 +259,7 @@ int main(int argc, const char** argv) {
 
 		// Notify the options variable map,
 		// throws an exception if required arguments are missing
-		notify(p_opts_vm);
+		p_opts::notify(p_opts_vm);
 	}
 	// Show error message if required options are indeed missing
 	catch (p_opts::required_option& e)
