@@ -239,6 +239,10 @@ int main(int argc, char **  argv)
 		// Create a new SIFT detector
 		VlSiftFilt * detector = vl_sift_new(I.cols, I.rows, octaves, levels, 0);
 
+		// Setting peak and edge thresholds
+		vl_sift_set_peak_thresh(detector, peak_thresh);
+		vl_sift_set_edge_thresh(detector, edge_thresh);
+
 		// If first octave cannot be calculated then there is probably
 		// some sort of error with the image file, so continue to the next one
 		if (vl_sift_process_first_octave(detector, (float*)I.data) == VL_ERR_EOF)
