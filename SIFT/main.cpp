@@ -53,9 +53,9 @@ void setup_p_opts(int argc, char ** argv)
 			"Increasing this value will result in fewer keypoints.")
 		("edge-thresh,T", p_opts::value<double>()->default_value(3.5),
 			"Edge rejection threshold. Increasing this will result is fewer keypoints.")
-		("octaves", p_opts::value<int>()->default_value(3),
+		("octaves", p_opts::value<int>()->default_value(-1),
 			"Number of octaves")
-		("levels", p_opts::value<int>()->default_value(5),
+		("levels", p_opts::value<int>()->default_value(3),
 			"Number of levels per octave");
 	p_opts_pos.add("action", 1).add("input", -1);
 
@@ -107,7 +107,7 @@ bool is_supported_image_file(fsys::path path)
 /// </exception>
 void resolveInput(const fsys::path & path, std::vector<fsys::path> & files)
 {
-	std::cout << "Input: " << path << std::endl;
+	//std::cout << "Input: " << path << std::endl;
 	if (fsys::exists(path))									// If path exists
 	{
 		if (fsys::is_regular_file(path))					// and is a regular file
@@ -222,6 +222,9 @@ int main(int argc, char **  argv)
 	// Extracting levels of each octave
 	int levels = p_opts_vm["levels"].as<int>();
 
+	// Vector that holds the image descriptors
+	std::vector<vl_sift_pix*> descriptors = std::vector<vl_sift_pix*>();
+
 	// Looping through each input image file to extract its feature keypoints
 	for (int i = 0; i < files.size(); ++i)
 	{
@@ -231,29 +234,50 @@ int main(int argc, char **  argv)
 		// Normalize pixel values in the range [0,1]
 		I.convertTo(I, CV_32F, 1.0 / 255.5);
 
-		// Create a new SIFT Filter
-		VlSiftFilt * filter = vl_sift_new(I.cols, I.rows, octaves, levels, -1);
+		std::cout << "Extracting keypoints from " << files[i].filename() << "...";
+
+		// Create a new SIFT detector
+		VlSiftFilt * detector = vl_sift_new(I.cols, I.rows, octaves, levels, 0);
 
 		// If first octave cannot be calculated then there is probably
 		// some sort of error with the image file, so continue to the next one
-		if (vl_sift_process_first_octave(filter, (float*) I.data) == VL_ERR_EOF) continue;
+		if (vl_sift_process_first_octave(detector, (float*)I.data) == VL_ERR_EOF)
+		{
+			vl_sift_delete(detector);
+			continue;
+		}
 
 		// Extract the keypoints of each octave
 		do
 		{
 			const VlSiftKeypoint * keypoints;
-			vl_sift_detect(filter);
-			keypoints = vl_sift_get_keypoints(filter);
+			vl_sift_detect(detector);
+			keypoints = vl_sift_get_keypoints(detector);
 
 			// Compute the descriptors of all keypoints in the current octave
-			for (int j = 0; j < vl_sift_get_nkeypoints(filter); ++j)
+			for (int j = 0; j < vl_sift_get_nkeypoints(detector); ++j)
 			{
-				/// TODO extract orientations and descriptors
+				// First calculate the orientation of the keypoint
+				// (library supports up to 4 orientations for each keypoint)
+				double angles[4];
+				int nangles = vl_sift_calc_keypoint_orientations(detector, angles, keypoints + j);
 
-
+				// For each orientation construct a different keypoint descriptor
+				for (int k = 0; k < nangles; ++k)
+				{
+					vl_sift_pix descriptor[128];
+					vl_sift_calc_keypoint_descriptor(detector, descriptor, keypoints + j, angles[k]);
+					// Save the descriptor
+					descriptors.push_back(descriptor);
+				}
 			}
-		} while (vl_sift_process_next_octave(filter) == VL_ERR_EOF);
-		
+		} while (vl_sift_process_next_octave(detector) == VL_ERR_EOF);
+
+		// Delete SIFT detector used for this image
+		vl_sift_delete(detector);
+
+		std::cout << " Extracted " << descriptors.size() << " keypoints" << std::endl;
+		getchar();
 	}
 
 	return SUCCESSFUL_RUN;
