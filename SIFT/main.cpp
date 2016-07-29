@@ -51,7 +51,7 @@ void setup_p_opts(int argc, char ** argv)
 		("peak-thresh,t", p_opts::value<double>()->default_value(0.03),
 			"Minimun amount of contrast to accept a keypoint."
 			"Increasing this value will result in fewer keypoints.")
-		("edge-thresh,T", p_opts::value<double>()->default_value(3.5),
+		("edge-thresh,T", p_opts::value<double>()->default_value(10),
 			"Edge rejection threshold. Increasing this will result is fewer keypoints.")
 		("octaves", p_opts::value<int>()->default_value(-1),
 			"Number of octaves")
