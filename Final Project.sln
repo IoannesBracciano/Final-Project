@@ -7,6 +7,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Filter", "Filter\Filter.vcx
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SIFT", "SIFT\SIFT.vcxproj", "{AF2B2735-A00C-4572-8D3D-4ADD487FB927}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Match", "Match\Match.vcxproj", "{836FBF4F-78D4-4359-8F7C-D67FB0D6E2CE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -31,6 +33,14 @@ Global
 		{AF2B2735-A00C-4572-8D3D-4ADD487FB927}.Release|x64.Build.0 = Release|x64
 		{AF2B2735-A00C-4572-8D3D-4ADD487FB927}.Release|x86.ActiveCfg = Release|Win32
 		{AF2B2735-A00C-4572-8D3D-4ADD487FB927}.Release|x86.Build.0 = Release|Win32
+		{836FBF4F-78D4-4359-8F7C-D67FB0D6E2CE}.Debug|x64.ActiveCfg = Debug|x64
+		{836FBF4F-78D4-4359-8F7C-D67FB0D6E2CE}.Debug|x64.Build.0 = Debug|x64
+		{836FBF4F-78D4-4359-8F7C-D67FB0D6E2CE}.Debug|x86.ActiveCfg = Debug|Win32
+		{836FBF4F-78D4-4359-8F7C-D67FB0D6E2CE}.Debug|x86.Build.0 = Debug|Win32
+		{836FBF4F-78D4-4359-8F7C-D67FB0D6E2CE}.Release|x64.ActiveCfg = Release|x64
+		{836FBF4F-78D4-4359-8F7C-D67FB0D6E2CE}.Release|x64.Build.0 = Release|x64
+		{836FBF4F-78D4-4359-8F7C-D67FB0D6E2CE}.Release|x86.ActiveCfg = Release|Win32
+		{836FBF4F-78D4-4359-8F7C-D67FB0D6E2CE}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
