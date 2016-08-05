@@ -234,10 +234,16 @@ int main(int argc, char **  argv)
 		p_opts::notify(p_opts_vm);
 	}
 	// Show error message if required options are indeed missing
-	catch (p_opts::required_option& e)
+	catch (p_opts::required_option & e)
 	{
 		std::cout << e.what() << std::endl;
 		return REQUIRED_OPT_NOT_SET;
+	}
+	// Show error message if command line syntaxt is wrong
+	catch (p_opts::invalid_command_line_syntax & e)
+	{
+		std::cout << e.what() << std::endl;
+		return INVALID_SYNTAX;
 	}
 
 	/* Program was called correctly, OK to continue */

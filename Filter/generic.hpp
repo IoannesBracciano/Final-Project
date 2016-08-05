@@ -11,10 +11,12 @@ const enum RETURN_CODES
 {
 	// User did not provide a required program option
 	REQUIRED_OPT_NOT_SET = -1,
+	// User called the program using an erroneous command line syntax
+	INVALID_SYNTAX = -2,
 	// Input path is invalid
-	INVALID_INPUT = -2,
+	INVALID_INPUT = -3,
 	// Output path is invalid
-	INVALID_OUTPUT = -3,
+	INVALID_OUTPUT = -4,
 
 	// Program terminated successfully
 	SUCCESSFUL_RUN = 0
