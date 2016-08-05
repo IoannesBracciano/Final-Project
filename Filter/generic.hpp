@@ -111,7 +111,7 @@ bool replace_file_dialog(const fsys::path & path)
 {
 	static char replace_file = 0;	// making this static to remember user's action
                                     // in case he selects to perform it on all files
-	char perform_on_all;
+	static char perform_on_all = 0;
 
 	if (replace_file == 0)
 	{

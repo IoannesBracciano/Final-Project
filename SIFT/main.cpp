@@ -315,7 +315,7 @@ int main(int argc, char **  argv)
 		// Program was called to match descriptor files
 		if (p_opts_vm.count("macth"))
 		{
-			std::cout << "About to be implemented!" << std::endl
+			std::cout << "About to be implemented!" << std::endl;
 		}
 		// Program was called to extract descriptors from images
 		else
