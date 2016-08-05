@@ -58,21 +58,21 @@ bool is_supported_image_file(const fsys::path & path)
 /// <exception cref="std::runtime_error">
 /// Thrown when input path does not exist or is neither a file nor a directory
 /// </exception>
-void resolveInput(const fsys::path & path, std::vector<fsys::path> & files)
+void resolveInput(const fsys::path & path, std::vector<fsys::path> & files,
+	bool(*file_ext_filter)(const fsys::path&) = is_supported_image_file)
 {
 	//std::cout << "Input: " << path << std::endl;
 	if (fsys::exists(path))									// If path exists
 	{
 		if (fsys::is_regular_file(path))					// and is a regular file
 		{
-			if (is_supported_image_file(path))				// and it is a supported image file
+			if (file_ext_filter(path))						// and it is a supported image file
 			{
 				files.push_back(path);						// add it to the files vector
 			}
 			else // Unsupported file or not an image file at all
 			{
-				throw std::runtime_error("Unsupported file. For a list of supported image files see: "
-					"http://docs.opencv.org/3.0-beta/modules/imgcodecs/doc/reading_and_writing_images.html#imread");
+				throw std::runtime_error("Unsupported file extension");
 			}
 		}
 		else if (fsys::is_directory(path))					// else if path is a directory
@@ -98,4 +98,52 @@ void resolveInput(const fsys::path & path, std::vector<fsys::path> & files)
 	{
 		throw std::runtime_error("Input path does not exist");
 	}
+}
+
+///<summary>
+/// Presents a dialog asking the user if he want to replace
+/// the already existing file or not. User can choose to perform
+/// his selected action on all files, and the dialog won't repeat
+/// itself whenever the function is called again
+/// </summary>
+/// <param name="path">the path to the already existing file</param>
+bool replace_file_dialog(const fsys::path & path)
+{
+	static char replace_file = 0;	// making this static to remember user's action
+                                    // in case he selects to perform it on all files
+	char perform_on_all;
+
+	if (replace_file == 0)
+	{
+		std::cout << (path) << " exists. Do you want to replace it? (y/n, default no):";
+		do { std::cin >> replace_file; } while (replace_file == '\n');
+
+		while (replace_file != 'n' && replace_file != 'N' &&
+			replace_file != 'y' && replace_file != 'Y')
+		{
+			std::cout << "Didn't get that, type 'y' for yes or 'n' for no:";
+			do { std::cin >> replace_file; } while (replace_file == '\n');
+		}
+
+		std::cout << "Perform this action for all existing files? (y/n, default no):";
+		do { std::cin >> perform_on_all; } while (perform_on_all == '\n');
+
+		while (perform_on_all != 'n' && perform_on_all != 'N' &&
+			perform_on_all != 'y' && perform_on_all != 'Y')
+		{
+			std::cout << "Didn't get that, type 'y' for yes or 'n' for no:";
+			do { std::cin >> perform_on_all; } while (perform_on_all == '\n');
+		}
+	}
+
+	if (replace_file == 'n' || replace_file == 'N')
+	{
+		if (perform_on_all == 'n' || perform_on_all == 'N')
+		{
+			replace_file = 0;
+		}
+		return false;
+	}
+
+	return true;
 }
