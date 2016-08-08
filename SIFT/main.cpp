@@ -25,8 +25,6 @@ void setup_p_opts(int argc, char ** argv)
 {
 	p_opts_desc.add_options()
 		("help", "Print this help message")
-		//("action", p_opts::value<std::string>()->required(),
-		//	"[extract|match] Which action to perform")
 		("input,i", p_opts::value<std::vector<std::string>>()
 			->default_value(std::vector<std::string>(), "current working directory"),
 			"Absolute or relative path to the input image or descriptors file(s), "
@@ -38,7 +36,7 @@ void setup_p_opts(int argc, char ** argv)
 		("match,m", p_opts::value<std::vector<std::string>>(),
 			"A path to a descriptor file or a directory containing descriptor files "
 			"that the input image descriptors will be matched against")
-		("peak-thresh,t", p_opts::value<double>()->default_value(0.03),
+		("peak-thresh,t", p_opts::value<double>()->default_value(0.01),
 			"Minimun amount of contrast to accept a keypoint."
 			"Increasing this value will result in fewer keypoints")
 		("edge-thresh,T", p_opts::value<double>()->default_value(10),
@@ -58,25 +56,70 @@ void setup_p_opts(int argc, char ** argv)
 }
 
 /// <summary>
-/// Checks if given path is a supported image or descriptors file.
+/// Checks if given path is a supported descriptors file.
 /// Supported descriptors files are created using SIFT.exe
 /// and they are simply 128 floating point numbers (default SIFT descriptor size)
 /// written sequentially in binary form
 /// </summary>
 /// <param name="path">the path of the file to be examined</param>
-bool extra_supported_files_filter(const fsys::path & path)
+/// <returns>true if file passes the filter, false if not</returns>
+bool descriptors_file_filter(const fsys::path & path)
 {
-	return is_supported_image_file(path) || path.extension() == ".sifd";
+	return path.extension() == ".sifd";
 }
 
-void extract(fsys::path & input, std::vector<vl_sift_pix*> & descriptors,
+/// <summary>
+/// Combined image and descriptors file filter
+/// </summary>
+/// <param name="path">the path of the file to be examined</param>
+/// <returns>true if file passes the filter, false if not</returns>
+bool extra_supported_file_filter(const fsys::path & path)
+{
+	return image_file_filter(path) || descriptors_file_filter(path);
+}
+
+/// <summary>
+/// Loads a descriptors file into memory
+/// </summary>
+/// <param name="path">a valid path to the descriptors file</param>
+/// <param name="vector">a pointer to the first block of memory where the descriptors are loaded</param>
+/// <returns>number of descriptors in the vector</returns>
+int load_descriptors_file(const fsys::path & path, vl_sift_pix * & vector)
+{
+	// Getting the file size in bytes
+	uintmax_t file_size = fsys::file_size(path);
+	// Creating a vector of the same size to store the descriptors
+	vector = (vl_sift_pix*)malloc(file_size);
+	// Opening the file in binary mode for reading
+	fsys::ifstream file(path, std::ios::in | std::ios::binary);
+	// Reading the file into the previously created vector
+	file.read(reinterpret_cast<char*>(vector), file_size);
+	// Closing file stream
+	file.close();
+
+	return file_size / (128*sizeof(vl_sift_pix));
+}
+
+/// <summary>
+/// Opens the image found under path, extracts its SIFT descriptors
+/// and saves the into the given descriptors vector
+/// </summary>
+/// <param name="octaves">number of octaves (SIFT specific parameter)</param>
+/// <param name="levels">number of levels per octave (SIFT specific parameter)</param>
+/// <param name="peak_thresh">minimun amount of contrast to accept a keypoint (SIFT specific parameter)</param>
+/// <param name="edge_thresh">edge rejection threshold (SIFT specific parameter)</param>
+/// <returns>execution time in seconds</returns>
+double extract(fsys::path & path, std::vector<vl_sift_pix*> & descriptors,
 	int octaves, int levels, double peak_thresh, double edge_thresh)
 {
 	// Open image file
-	cv::Mat I = cv::imread(input.string(), cv::IMREAD_GRAYSCALE);
+	cv::Mat I = cv::imread(path.string(), cv::IMREAD_GRAYSCALE);
 	                                       // SIFT works only on gray scale images
 	// Normalize pixel values in the range [0,1]
 	I.convertTo(I, CV_32F, 1.0 / 255.5);
+
+	// Start clock
+	int64 t = cv::getTickCount();
 
 	// Create a new SIFT detector
 	VlSiftFilt * detector = vl_sift_new(I.cols, I.rows, octaves, levels, 0);
@@ -89,7 +132,8 @@ void extract(fsys::path & input, std::vector<vl_sift_pix*> & descriptors,
 	if (vl_sift_process_first_octave(detector, (float*)I.data) == VL_ERR_EOF)
 	{
 		vl_sift_delete(detector);
-		return;
+		// Return -1 to indicate failure
+		return -1;
 	}
 
 	// Extract the keypoints of each octave
@@ -110,20 +154,20 @@ void extract(fsys::path & input, std::vector<vl_sift_pix*> & descriptors,
 			// For each orientation construct a different keypoint descriptor
 			for (int j = 0; j < nangles; ++j)
 			{
-				vl_sift_pix descriptor[128];
+				vl_sift_pix * descriptor = (vl_sift_pix*) malloc(sizeof(vl_sift_pix)*128);
 				vl_sift_calc_keypoint_descriptor(detector, descriptor, keypoints + i, angles[j]);
 				descriptors.push_back(descriptor);
 			}
 		}
 	} while (vl_sift_process_next_octave(detector) != VL_ERR_EOF);
-	                                   //           A
-	                                   //  One God  | damn day
-	                                   // to figure | out I was
-	                                   //     doing | that wrong
-	                                   //  ;@@@@@@@@@@@@@@@@@@
+
+	// Calculate execution time in seconds
+	double dt = double(cv::getTickCount() - t) / double(cv::getTickFrequency());
 
 	// Delete SIFT detector used for this image
 	vl_sift_delete(detector);
+
+	return dt;
 }
 
 /** The next portion of code was ported from the matlab interface of the vlfeat library
@@ -143,7 +187,7 @@ typedef struct {
 } Pair;
 
 /// <summary>Compares the descriptors of two different images and matches the pairs</summary>
-/// <param name="pairs">pointer to the vector to be filled with the matched pairs.
+/// <param name="pairs">pointer to a vector to be filled with the matched pairs.
 ///                     Needs to be big enough to hold all possible pairs</param>
 /// <param name="descr1">pointer to the descriptor matrix of the first image,
 ///                      in row major order (K1 rows x ND columns)</param>
@@ -153,15 +197,9 @@ typedef struct {
 /// <param name="K2">Number of descriptors of second image</param>
 /// <param name="ND">Descriptor size (=128 for SIFT)</param>
 /// <param name="thresh">Ratio test threshold value (=1.5)</param>
-Pair * compare(
-	Pair *pairs,
-	const float *descr1,
-	const float *descr2,
-	int K1,
-	int K2,
-	int ND = 128,
-	float thresh = 1.5
-	)
+/// <returns>a pointer pointing to the end of the vector conaitning the matched pairs</returns>
+Pair * compare(Pair * pairs, const float *descr1, const float *descr2,
+	int K1, int K2, int ND = 128, float thresh = 1.5)
 {
 	int k1, k2;
 
@@ -262,7 +300,6 @@ int main(int argc, char **  argv)
 	}
 	// Create another vector that will hold all input files after resolving the paths
 	std::vector<fsys::path> files = std::vector<fsys::path>();
-
 	// Try to resolve the input paths
 	try
 	{
@@ -271,12 +308,12 @@ int main(int argc, char **  argv)
 			if (p_opts_vm.count("match"))
 			{
 				// Input is also allowed to be a descriptors file if a match path is given
-				resolveInput(input[i], files, extra_supported_files_filter);
+				resolvePath(input[i], files, extra_supported_file_filter);
 			}
 			else
 			{
 				// Input must be a supported image file only to extract its descriptors
-				resolveInput(input[i], files);
+				resolvePath(input[i], files);
 			}
 		}
 	}
@@ -291,6 +328,19 @@ int main(int argc, char **  argv)
 	{
 		std::cout << e.what() << std::endl;
 		return INVALID_INPUT;
+	}
+
+	// Resolving match files (if option was commanded)
+	std::vector<fsys::path> match_files = std::vector<fsys::path>();
+	if (p_opts_vm.count("match"))
+	{
+		// Extracting match program option
+		std::vector<std::string> match = p_opts_vm["match"].as<std::vector<std::string>>();
+		for (int i = 0; i < match.size(); ++i)
+		{
+			resolvePath(match[i], match_files, descriptors_file_filter);
+			                                   // match files can only be descriptors files
+		}
 	}
 
 	// Resolving output
@@ -315,16 +365,77 @@ int main(int argc, char **  argv)
 	// Extracting levels of each octave
 	int levels = p_opts_vm["levels"].as<int>();
 
+	// Time and statistical metrics
+	unsigned int descr_mean_count = 0;
+	double exec_mean_time = 0;
+
 	// Looping through each input file
 	for (int i = 0; i < files.size(); ++i)
 	{
 		// Program was called to match descriptor files
-		if (p_opts_vm.count("macth"))
+		if (p_opts_vm.count("match"))
 		{
-			std::cout << "About to be implemented!" << std::endl;
+			// Declaring pointers to the descriptors to be matched
+			vl_sift_pix * descr1 = nullptr, * descr2 = nullptr;
+			int n_descr1 = 0, n_descr2 = 0;
+
+			// Opening input file
+			if (image_file_filter(files[i]))		    // If input file is image
+			{
+				// TODO: Extract the descriptors
+			}
+			else if (descriptors_file_filter(files[i])) // else if input file is a descriptors file
+			{
+				// load descriptors from file
+				n_descr1 = load_descriptors_file(files[i], descr1);
+			}
+
+			// Match metrics
+			unsigned int max_pairs = 0;
+			fsys::path best_match;
+			double total_time = 0;
+
+			// Looping through files to match the input descriptors against
+			for (int j = 0; j < match_files.size(); ++j)
+			{
+				// load descriptors from matching file
+				n_descr2 = load_descriptors_file(match_files[j], descr2);
+
+				std::cout << "Compairing " << files[i].filename() <<
+					" against " << match_files[j].filename() << "..." << std:: endl;
+
+				// compare the two descriptors vectors
+				Pair * pairs = (Pair*)malloc(sizeof(Pair) * (n_descr1 > n_descr2 ? n_descr1 : n_descr2));
+				Pair * pairs_first = pairs;
+				double tic = cv::getTickCount();
+				Pair * pairs_end = compare(pairs, descr1, descr2, n_descr1, n_descr2);
+				double tac = double(cv::getTickCount() - tic) / double(cv::getTickFrequency());
+				int n_pairs = pairs_end - pairs_first;
+
+				std::cout << "\t" << n_pairs << " pairs found in " << tac << " seconds" << std::endl;
+
+				if (n_pairs > max_pairs)
+				{
+					max_pairs = n_pairs;
+					best_match = match_files[j];
+				}
+
+				total_time += tac;
+
+				delete[] pairs_first;
+				delete[] descr2;
+			}
+
+			if (match_files.size() > 1)
+			{
+				std::cout << "Done in " << total_time << " seconds" << std::endl;
+				std::cout << "\t*** Best match: " << best_match.filename()  << " ***" << std::endl;
+			}
+
+			delete[] descr1;
 		}
-		// Program was called to extract descriptors from images
-		else
+		
+		else // Program was called to extract descriptors from images
 		{
 			// Vector that holds the image descriptors
 			std::vector<vl_sift_pix*> descriptors = std::vector<vl_sift_pix*>();
@@ -347,10 +458,15 @@ int main(int argc, char **  argv)
 					continue;
 
 			std::cout << "Extracting keypoints from " << files[i].filename() << "...";
-			extract(files[i], descriptors, octaves, levels, peak_thresh, edge_thresh);
-			std::cout << " Extracted " << descriptors.size() << " keypoints" << std::endl;
+			double t = extract(files[i], descriptors, octaves, levels, peak_thresh, edge_thresh);
+			std::cout << " Extracted " << descriptors.size() << " keypoints " <<
+				"in "<< t << " seconds" << std::endl;
 
-			// Create a binary file and write the descriptors in raw format
+			// Updating metrics
+			descr_mean_count += descriptors.size() / files.size();
+			exec_mean_time += t / files.size();
+
+			// Create a binary file and write the descriptors in raw binary format
 			fsys::ofstream ofs((output / new_filename), std::ios::out | std::ios::binary);
 			for (std::vector<vl_sift_pix*>::iterator it = descriptors.begin(); it != descriptors.end(); ++it)
 			{
@@ -359,6 +475,13 @@ int main(int argc, char **  argv)
 			}
 			ofs.close();
 		}
+	}
+
+	// Log
+	if (!p_opts_vm.count("match"))
+	{
+		std::cout << "Mean descriptors count per image: " << descr_mean_count << std::endl;
+		std::cout << "Mean extraction time per image: " << exec_mean_time << std::endl;
 	}
 
 	return SUCCESSFUL_RUN;

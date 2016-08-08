@@ -198,7 +198,7 @@ int main(int argc, const char** argv) {
 	{
 		for (int i = 0; i < input.size(); ++i)
 		{
-			resolveInput(input[i], files);
+			resolvePath(input[i], files);
 		}
 	}
 	// Report any filesystem errors and terminate

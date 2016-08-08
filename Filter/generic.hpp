@@ -28,7 +28,8 @@ const enum RETURN_CODES
 /// http://docs.opencv.org/3.0-beta/modules/imgcodecs/doc/reading_and_writing_images.html#imread
 /// </summary>
 /// <param name="path">the path of the file to be examined</param>
-bool is_supported_image_file(const fsys::path & path)
+/// <returns>true if file passes the filter, false if not</returns>
+bool image_file_filter(const fsys::path & path)
 {
 	return
 		// Windows bitmaps
@@ -50,20 +51,20 @@ bool is_supported_image_file(const fsys::path & path)
 }
 
 /// <summary>
-/// Resolves the input program option,
-/// populating a vector with the paths of supported files that are resolved
+/// Resolves a given path and populates a vector with paths to supported files
+/// If the given path is a path to a supported file, it is pushed directly in the
+/// forementioned vector, else if a directory, it is searched for files (up to one
+/// level only) and the supported files that are found are pushed in the vector
 /// </summary>
-/// <param name="path">the path to be resolved.
-/// if it points to a directory, all supported files are extracted
-/// </param>
+/// <param name="path">the path to be resolved</param>
 /// <param name="files">a reference to the vector where extracted paths are kept</param>
+/// <param name="file_ext_filter">pointer to a function that filters supported files</param>
 /// <exception cref="std::runtime_error">
 /// Thrown when input path does not exist or is neither a file nor a directory
 /// </exception>
-void resolveInput(const fsys::path & path, std::vector<fsys::path> & files,
-	bool(*file_ext_filter)(const fsys::path&) = is_supported_image_file)
+void resolvePath(const fsys::path & path, std::vector<fsys::path> & files,
+	bool(*file_ext_filter)(const fsys::path&) = image_file_filter)
 {
-	//std::cout << "Input: " << path << std::endl;
 	if (fsys::exists(path))									// If path exists
 	{
 		if (fsys::is_regular_file(path))					// and is a regular file
@@ -84,7 +85,7 @@ void resolveInput(const fsys::path & path, std::vector<fsys::path> & files,
 			{												// Iterate through all files one level down
 				if (fsys::is_regular_file(itr->path()))
 				{
-					if (is_supported_image_file(itr->path()))
+					if (file_ext_filter(itr->path()))
 					{										// and if any is a supported image file
 						files.push_back(itr->path());		// add it to the files vector
 					}
