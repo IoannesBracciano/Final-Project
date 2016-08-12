@@ -1,5 +1,5 @@
 #pragma once
-
+#include <iostream>
 #include "boost/program_options.hpp"
 #include "boost/filesystem.hpp"
 
@@ -17,6 +17,7 @@ const enum RETURN_CODES
 	INVALID_INPUT = -3,
 	// Output path is invalid
 	INVALID_OUTPUT = -4,
+	INVALID_LOG = -5,
 
 	// Program terminated successfully
 	SUCCESSFUL_RUN = 0

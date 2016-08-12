@@ -1,7 +1,9 @@
 #include <iostream>
-#include "../Filter/generic.hpp"
 #include "opencv2\core\core.hpp"
 #include "opencv2\highgui\highgui.hpp"
+#include "boost/regex.hpp"
+#include "../Filter/generic.hpp"
+#include "log.hpp"
 
 extern "C" {
 #include "vl/sift.h"
@@ -16,6 +18,9 @@ p_opts::positional_options_description p_opts_pos;
 // Array used to map variable names with their corresponding values
 p_opts::variables_map p_opts_vm;
 
+// Regular expressions for query and database image file names
+boost::regex query_images{ "q_img\([0-9]+\).*" };
+boost::regex base_images{ "db_img\([0-9]+\).*" };
 
 /// <summary>Sets up the program options and parses the argv vector accordingly
 /// </summary>
@@ -36,6 +41,8 @@ void setup_p_opts(int argc, char ** argv)
 		("match,m", p_opts::value<std::vector<std::string>>(),
 			"A path to a descriptor file or a directory containing descriptor files "
 			"that the input image descriptors will be matched against")
+		("log,l", p_opts::value<std::string>(),
+			"A path to a directory where the log will be output")
 		("peak-thresh,t", p_opts::value<double>()->default_value(0.01),
 			"Minimun amount of contrast to accept a keypoint."
 			"Increasing this value will result in fewer keypoints")
@@ -356,6 +363,18 @@ int main(int argc, char **  argv)
 		}
 	}
 
+	// Resolving log path
+	fsys::path log;
+	if (p_opts_vm.count("log"))
+	{
+		log = p_opts_vm["log"].as<std::string>();
+		if (!fsys::exists(log) || !fsys::is_directory(log))
+		{
+			std::cout << "Specify an existing directory for the log file" << std::endl;
+			return INVALID_LOG;
+		}
+	}
+
 	// Extracting peak thresh
 	double peak_thresh = p_opts_vm["peak-thresh"].as<double>();
 	// Extracting edge threshold
@@ -375,6 +394,22 @@ int main(int argc, char **  argv)
 		// Program was called to match descriptor files
 		if (p_opts_vm.count("match"))
 		{
+			// Open the log file if specified in the program options
+			if (p_opts_vm.count("log"))
+			{
+				try
+				{
+					log_init(log / "log.txt");
+				}
+				catch (std::exception e)
+				{
+					std::cout << "Could not open log file: " << std::endl
+						<< e.what() << std::endl;
+
+					return INVALID_LOG;
+				}
+			}
+
 			// Declaring pointers to the descriptors to be matched
 			vl_sift_pix * descr1 = nullptr, * descr2 = nullptr;
 			int n_descr1 = 0, n_descr2 = 0;
@@ -382,7 +417,17 @@ int main(int argc, char **  argv)
 			// Opening input file
 			if (image_file_filter(files[i]))		    // If input file is image
 			{
-				// TODO: Extract the descriptors
+				std::vector<vl_sift_pix*> descriptors = std::vector<vl_sift_pix*>();
+				extract(files[i], descriptors, octaves, levels, peak_thresh, edge_thresh);
+				n_descr1 = descriptors.size();
+				descr1 = (vl_sift_pix*)malloc(n_descr1 * 128 * sizeof(vl_sift_pix));
+				for (int j = 0; j < n_descr1; ++j)
+				{
+					for (int k = 0; k < 128; ++k)
+					{
+						descr1[j * 128 + k] = descriptors[j][k];
+					}
+				}
 			}
 			else if (descriptors_file_filter(files[i])) // else if input file is a descriptors file
 			{
@@ -390,10 +435,24 @@ int main(int argc, char **  argv)
 				n_descr1 = load_descriptors_file(files[i], descr1);
 			}
 
+			if (p_opts_vm.count("log"))
+			{
+				if (boost::regex_match(files[i].filename().string(), query_images))
+				{
+					log_write("Compairing query image " + files[i].filename().string() + " against...");
+				}
+				else if (boost::regex_match(files[i].filename().string(), base_images))
+				{
+					log_write("Compairing database image " + files[i].filename().string() + " against...");
+				}
+			}
+
 			// Match metrics
 			unsigned int max_pairs = 0;
 			fsys::path best_match;
 			double total_time = 0;
+
+			
 
 			// Looping through files to match the input descriptors against
 			for (int j = 0; j < match_files.size(); ++j)
@@ -404,6 +463,11 @@ int main(int argc, char **  argv)
 				std::cout << "Compairing " << files[i].filename() <<
 					" against " << match_files[j].filename() << "..." << std:: endl;
 
+				if (p_opts_vm.count("log"))
+				{
+					log_write("\t- " + match_files[j].filename().string() + ": ", false);
+				}
+
 				// compare the two descriptors vectors
 				Pair * pairs = (Pair*)malloc(sizeof(Pair) * (n_descr1 > n_descr2 ? n_descr1 : n_descr2));
 				Pair * pairs_first = pairs;
@@ -413,6 +477,12 @@ int main(int argc, char **  argv)
 				int n_pairs = pairs_end - pairs_first;
 
 				std::cout << "\t" << n_pairs << " pairs found in " << tac << " seconds" << std::endl;
+
+				if (p_opts_vm.count("log"))
+				{
+					log_write(boost::lexical_cast<std::string>(n_pairs) + " pairs found in " +
+						boost::lexical_cast<std::string>(tac) + " seconds");
+				}
 
 				if (n_pairs > max_pairs)
 				{
@@ -430,6 +500,13 @@ int main(int argc, char **  argv)
 			{
 				std::cout << "Done in " << total_time << " seconds" << std::endl;
 				std::cout << "\t*** Best match: " << best_match.filename()  << " ***" << std::endl;
+
+				if (p_opts_vm.count("log"))
+				{
+					log_write("Done in " + boost::lexical_cast<std::string>(total_time) + " seconds");
+					log_write("Best match: " + best_match.filename().string());
+					log_end();
+				}
 			}
 
 			delete[] descr1;
