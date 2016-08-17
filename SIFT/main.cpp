@@ -3,11 +3,8 @@
 #include "opencv2\highgui\highgui.hpp"
 #include "boost/regex.hpp"
 #include "../Filter/generic.hpp"
-#include "log.hpp"
 
-extern "C" {
-#include "vl/sift.h"
-}
+#include "sift.hpp"
 
 // Holds the description of the program options
 p_opts::options_description p_opts_desc("Arguments description");
@@ -17,10 +14,6 @@ p_opts::positional_options_description p_opts_pos;
 
 // Array used to map variable names with their corresponding values
 p_opts::variables_map p_opts_vm;
-
-// Regular expressions for query and database image file names
-boost::regex query_images{ "q_img\([0-9]+\).*" };
-boost::regex base_images{ "db_img\([0-9]+\).*" };
 
 /// <summary>Sets up the program options and parses the argv vector accordingly
 /// </summary>
@@ -176,84 +169,6 @@ double extract(fsys::path & path, std::vector<vl_sift_pix*> & descriptors,
 
 	return dt;
 }
-
-/** The next portion of code was ported from the matlab interface of the vlfeat library
-as there was no suitable code for matching between two image descriptors in C API
-and was copied and pasted almost "as is".
-See http://stackoverflow.com/questions/26925038/how-to-use-vlfeat-sift-matching-function-in-c-code
-*/
-
-/// <summary>Holds matched descriptor pairs</summary>
-typedef struct {
-	/// <summary>Descriptor of first image</summary>
-	int k1;
-	/// <summary>Descriptor of second image</summary>
-	int k2;
-	/// <summary>Score of matching</summary>
-	double score;
-} Pair;
-
-/// <summary>Compares the descriptors of two different images and matches the pairs</summary>
-/// <param name="pairs">pointer to a vector to be filled with the matched pairs.
-///                     Needs to be big enough to hold all possible pairs</param>
-/// <param name="descr1">pointer to the descriptor matrix of the first image,
-///                      in row major order (K1 rows x ND columns)</param>
-/// <param name="descr2">pointer to the descriptor matrix of the second image,
-///                      in row major order (K1 rows x ND columns)</param>
-/// <param name="K1">Number of descriptors of first image</param>
-/// <param name="K2">Number of descriptors of second image</param>
-/// <param name="ND">Descriptor size (=128 for SIFT)</param>
-/// <param name="thresh">Ratio test threshold value (=1.5)</param>
-/// <returns>a pointer pointing to the end of the vector conaitning the matched pairs</returns>
-Pair * compare(Pair * pairs, const float *descr1, const float *descr2,
-	int K1, int K2, int ND = 128, float thresh = 1.5)
-{
-	int k1, k2;
-
-	/* Loop over 1st image descr. */
-	for (k1 = 0; k1 < K1; ++k1, descr1 += ND) {
-		float best = FLT_MAX;
-		float second_best = FLT_MAX;
-		int bestk = -1;
-
-		/* Loop over 2nd image descr. and find the 1st and 2nd closest descr. */
-		for (k2 = 0; k2 < K2; ++k2, descr2 += ND) {
-			int bin;
-			float acc = 0;
-
-			/* Compute the square L2 distance between descriptors */
-			for (bin = 0; bin < ND; ++bin) {
-				float delta = descr1[bin] - descr2[bin];
-				acc += delta*delta;
-				if (acc >= second_best)
-					break;
-			}
-
-			if (acc < best) {
-				second_best = best;
-				best = acc;
-				bestk = k2;
-			}
-			else if (acc < second_best) {
-				second_best = acc;
-			}
-		}
-
-		/* Rewind */
-		descr2 -= ND*K2;
-
-		/* Record the correspondence if the best descr. passes the ratio test */
-		if (thresh * best < second_best && bestk != -1) {
-			pairs->k1 = k1;
-			pairs->k2 = bestk;
-			pairs->score = best;
-			pairs++;
-		}
-	}
-
-	return pairs;
-}
-/** End of ported code section */
 
 
 ///
@@ -416,7 +331,8 @@ int main(int argc, char **  argv)
 
 			// Opening input file
 			if (image_file_filter(files[i]))		    // If input file is image
-			{
+			{	
+				// Extract descriptors
 				std::vector<vl_sift_pix*> descriptors = std::vector<vl_sift_pix*>();
 				extract(files[i], descriptors, octaves, levels, peak_thresh, edge_thresh);
 				n_descr1 = descriptors.size();
@@ -437,22 +353,25 @@ int main(int argc, char **  argv)
 
 			if (p_opts_vm.count("log"))
 			{
-				if (boost::regex_match(files[i].filename().string(), query_images))
+				if (get_asset_type(files[i]) == QUERY_ASSET)
 				{
-					log_write("Compairing query image " + files[i].filename().string() + " against...");
+					log_write("Compairing query asset " + get_asset_id(files[i]) + " against...");
 				}
-				else if (boost::regex_match(files[i].filename().string(), base_images))
+				else if (get_asset_type(files[i]) == DB_ASSET)
 				{
-					log_write("Compairing database image " + files[i].filename().string() + " against...");
+					log_write("Compairing database asset " + get_asset_id(files[i]) + " against...");
+				}
+				else
+				{
+					log_write("Compairing asset " + files[i].filename().string() + " against...");
 				}
 			}
 
-			// Match metrics
-			unsigned int max_pairs = 0;
-			fsys::path best_match;
-			double total_time = 0;
+			/** TEMPORARY FILE FOR EASE OF COPYING TO EXCEL - TO BE REMOVED **/
+			//fsys::ofstream tmplog(log / "excel.txt", std::ios::out);
 
-			
+			// Match metrics
+			double total_time = 0;
 
 			// Looping through files to match the input descriptors against
 			for (int j = 0; j < match_files.size(); ++j)
@@ -469,14 +388,18 @@ int main(int argc, char **  argv)
 				}
 
 				// compare the two descriptors vectors
-				Pair * pairs = (Pair*)malloc(sizeof(Pair) * (n_descr1 > n_descr2 ? n_descr1 : n_descr2));
-				Pair * pairs_first = pairs;
+				Pair * pairs_begin = (Pair*)malloc(sizeof(Pair) * (n_descr1 > n_descr2 ? n_descr1 : n_descr2));
 				double tic = cv::getTickCount();
-				Pair * pairs_end = compare(pairs, descr1, descr2, n_descr1, n_descr2);
+				Pair * pairs_end = compare(pairs_begin, descr1, descr2, n_descr1, n_descr2);
 				double tac = double(cv::getTickCount() - tic) / double(cv::getTickFrequency());
-				int n_pairs = pairs_end - pairs_first;
+
+				register_asset_descr_pairs(get_asset_id(files[i]), get_asset_id(match_files[j]),
+					pairs_begin, pairs_end);
+
+				unsigned int n_pairs = get_asset_descr_pairs(get_asset_id(files[i]), get_asset_id(match_files[j])).size();
 
 				std::cout << "\t" << n_pairs << " pairs found in " << tac << " seconds" << std::endl;
+				//tmplog << boost::lexical_cast<std::string>(n_pairs) << std::endl;
 
 				if (p_opts_vm.count("log"))
 				{
@@ -484,30 +407,28 @@ int main(int argc, char **  argv)
 						boost::lexical_cast<std::string>(tac) + " seconds");
 				}
 
-				if (n_pairs > max_pairs)
-				{
-					max_pairs = n_pairs;
-					best_match = match_files[j];
-				}
-
 				total_time += tac;
 
-				delete[] pairs_first;
+				delete[] pairs_begin;
 				delete[] descr2;
 			}
 
 			if (match_files.size() > 1)
 			{
+				std::pair<std::string, std::string> best_match = get_best_match(get_asset_id(files[i]));
 				std::cout << "Done in " << total_time << " seconds" << std::endl;
-				std::cout << "\t*** Best match: " << best_match.filename()  << " ***" << std::endl;
+				std::cout << "\t*** Best asset match pair: " << best_match.first << " => " << best_match.second << " ***" << std::endl;
+				register_asset_match(best_match.first, best_match.second);
 
 				if (p_opts_vm.count("log"))
 				{
 					log_write("Done in " + boost::lexical_cast<std::string>(total_time) + " seconds");
-					log_write("Best match: " + best_match.filename().string());
+					log_write("Best asset match pair: " + best_match.first + " => " + best_match.second);
 					log_end();
 				}
 			}
+
+			//tmplog.close();
 
 			delete[] descr1;
 		}
@@ -555,7 +476,11 @@ int main(int argc, char **  argv)
 	}
 
 	// Log
-	if (!p_opts_vm.count("match"))
+	if (p_opts_vm.count("match"))
+	{
+		std::cout << "Correct matches percentage: " << get_correct_match_percentage() << "%" << std::endl;
+	}
+	else
 	{
 		std::cout << "Mean descriptors count per image: " << descr_mean_count << std::endl;
 		std::cout << "Mean extraction time per image: " << exec_mean_time << std::endl;

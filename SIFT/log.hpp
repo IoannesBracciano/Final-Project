@@ -1,6 +1,7 @@
 #pragma once
 #include <iostream>
 #include "boost/program_options.hpp"
+/* Log utilities */
 #include "boost/filesystem.hpp"
 #include "boost/date_time.hpp"
 
@@ -12,7 +13,7 @@ static boost::filesystem::ofstream logofstr;
 /// <param name="stream">an uninitialized output file stream</param>
 void log_init(const boost::filesystem::path & path)
 {
-	logofstr.open(path);
+	logofstr.open(path, std::ios::out | std::ios::app);
 	logofstr << boost::posix_time::to_iso_string(
 		boost::posix_time::second_clock::local_time())
 		<< "\tsift.exe Init log file" << std::endl;
@@ -28,6 +29,7 @@ void log_write(const std::string content, bool endl = true)
 	if (endl) logofstr << std::endl;
 }
 
+/// <summary>Closes the log file</summary>
 void log_end()
 {
 	logofstr << std::endl  << "End of log\t" << boost::posix_time::to_iso_string(

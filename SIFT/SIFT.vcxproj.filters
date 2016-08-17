@@ -26,5 +26,20 @@
     <ClInclude Include="log.hpp">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="mappings.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dataset.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sift.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="stattools.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="pair.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

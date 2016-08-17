@@ -134,7 +134,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Filter\generic.hpp" />
+    <ClInclude Include="dataset.hpp" />
     <ClInclude Include="log.hpp" />
+    <ClInclude Include="mappings.hpp" />
+    <ClInclude Include="pair.hpp" />
+    <ClInclude Include="sift.hpp" />
+    <ClInclude Include="stattools.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
